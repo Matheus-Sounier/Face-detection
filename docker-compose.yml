@@ -21,3 +21,21 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+
+  fastapi_app:
+    build: 
+      context: ./src/api
+      dockerfile: ./src/api/Dockerfile
+    container_name: ${CONTAINER_API}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PORT_APi}:8000"
+    volumes:
+      - ./src/api:/app
+    depends_on:
+      oracle:
+        condition: service_healthy
+    networks:
+      - computer_vision_network
