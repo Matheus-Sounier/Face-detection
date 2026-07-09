@@ -33,7 +33,7 @@ services:
     env_file:
       - .env
     ports:
-      - "${PORT_APi}:8000"
+      - "${PORT_API}:8000"
     volumes:
       - ./src/api:/app
     depends_on:
