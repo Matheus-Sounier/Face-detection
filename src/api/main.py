@@ -1,15 +1,23 @@
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException
-import cv2
-import numpy as np
-import mediapipe as mp
+from contextlib import asynccontextmanager
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from dotenv import load_dotenv
+
+import numpy as np
+import mediapipe as mp
+
+import cv2
 import os
 
 load_dotenv()
 
-app = FastAPI(title="Facial Access Control API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+app = FastAPI(title="Facial Access Control API", lifespan=lifespan)
 
 base_options = mp_python.BaseOptions(model_asset_path=os.getenv("MODEL_PATH"))
 detector_options = vision.FaceDetectorOptions(base_options=base_options)
