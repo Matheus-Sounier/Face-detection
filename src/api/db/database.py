@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+MATCH_THRESHOLD = 0.4
+
 def get_connection():
     return oracledb.connect(
         user=os.getenv("USER"),
@@ -93,6 +95,49 @@ def insert_person(name: str, employee_id: str, access_level: str, embedding) -> 
         )
         conn.commit()
         return result_id.getvalue()[0]
+    finally:
+        cursor.close()
+        conn.close()
+
+def find_closest_match(embedding):
+    """
+    Search for the person whose embedding is closest to the one provided.
+    Returns a dict with the person's data + distance, or None if 
+    no one in the database falls within the MATCH_THRESHOLD
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    vector_value = array.array("f", embedding.tolist())
+
+    try:
+        cursor.execute(
+            '''
+            SELECT id, name, employee_id, access_level,
+                   VECTOR_DISTANCE(embedding, :embedding, COSINE) AS distance
+            FROM DETECTED_PEOPLE
+            ORDER BY distance ASC
+            FETCH FIRST 1 ROW ONLY
+            ''',
+            {"embedding": vector_value},
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        person_id, name, employee_id, access_level, distance = row
+
+        if distance > MATCH_THRESHOLD:
+            return None
+
+        return {
+            "id": person_id,
+            "name": name,
+            "employee_id": employee_id,
+            "access_level": access_level,
+            "distance": distance,
+        }
     finally:
         cursor.close()
         conn.close()
