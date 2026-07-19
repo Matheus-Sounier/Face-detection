@@ -142,5 +142,28 @@ def find_closest_match(embedding):
         cursor.close()
         conn.close()
 
+def log_access(person_id, employee_id, recognized: bool, access_granted: bool):
+    """no recognizable face in the submitted cutout"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            '''
+            INSERT INTO ACCESS_LOGS (person_id, employee_id, recognized, access_granted)
+            VALUES (:person_id, :employee_id, :recognized, :access_granted)
+            ''',
+            {
+                "person_id": person_id,
+                "employee_id": employee_id,
+                "recognized": 1 if recognized else 0,
+                "access_granted": 1 if access_granted else 0,
+            },
+        )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
+
 if __name__ == "__main__":
     init_db()
