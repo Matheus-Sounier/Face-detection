@@ -91,7 +91,7 @@ def init_db():
         cursor.close()
         conn.close()
         
-def insert_person(name: str, employee_id: str, access_level: str, embedding, face_image_bytes: bytes) -> int:
+def insert_person(name: str, employee_id: str, access_level: str) -> int:
     """
     Inserts a new person with their facial embedding.
     Returns the generated id. Raises oracledb.IntegrityError if employee_id already exists.
@@ -99,22 +99,18 @@ def insert_person(name: str, employee_id: str, access_level: str, embedding, fac
     conn = get_connection()
     cursor = conn.cursor()
 
-    vector_value = array.array("f", embedding.tolist())
-
     try:
         result_id = cursor.var(int)
         cursor.execute(
             '''
-            INSERT INTO DETECTED_PEOPLE (name, employee_id, access_level, embedding, registered_face)
-            VALUES (:name, :employee_id, :access_level, :embedding, :registered_face)
+            INSERT INTO DETECTED_PEOPLE (name, employee_id, access_level)
+            VALUES (:name, :employee_id, :access_level)
             RETURNING id INTO :id
             ''',
             {
                 "name": name,
                 "employee_id": employee_id,
                 "access_level": access_level,
-                "embedding": vector_value,
-                "registered_face": face_image_bytes,
                 "id": result_id,
             },
         )
@@ -191,5 +187,35 @@ def log_access(person_id, employee_id, recognized: bool, access_granted: bool, f
         cursor.close()
         conn.close()
 
+def insert_face(person_id: int, embedding, face_image_bytes: bytes) -> int:
+    """
+    Adds one face embedding + image.
+    called multiple times for the same person_id.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    vector_value = array.array("f", embedding.tolist())
+
+    try:
+        result_id = cursor.var(int)
+        cursor.execute(
+            '''
+            INSERT INTO PERSON_FACES (person_id, embedding, face_image)
+            VALUES (:person_id, :embedding, :face_image)
+            RETURNING id INTO :id
+            ''',
+            {
+                "person_id": person_id,
+                "embedding": vector_value,
+                "face_image": face_image_bytes,
+                "id": result_id,
+            },
+        )
+        conn.commit()
+        return result_id.getvalue()[0]
+    finally:
+        cursor.close()
+        conn.close()
 if __name__ == "__main__":
     init_db()
