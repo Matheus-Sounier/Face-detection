@@ -22,13 +22,16 @@ with st.form("registration_form", clear_on_submit=True):
         "Access Level",
         ["Visitor", "Employee", "Administrator"]
     )
-    photo = st.file_uploader(
-        "Face Image",
-        type=["jpg", "jpeg", "png"]
-    )
+    st.caption("The more photos, the better the recognition accuracy")
 
-    if photo is not None:
-        st.image(photo, caption="Preview", width=200)
+    photo_1 = st.file_uploader("mandatory 1ª", type=["jpg", "jpeg", "png"])
+    photo_2 = st.file_uploader("optional 2ª ", type=["jpg", "jpeg", "png"])
+    photo_3 = st.file_uploader("optional 3ª", type=["jpg", "jpeg", "png"])
+
+    cols = st.columns(3)
+    for col, photo, label in zip(cols, [photo_1, photo_2, photo_3], ["photo 1ª", "photo 2ª", "photo 3ª"]):
+        if photo is not None:
+            col.image(photo, caption=label, width=150)
 
     submit = st.form_submit_button(
         ":material/how_to_reg: Register"
@@ -38,24 +41,24 @@ if submit:
     missing_fields = (
         not full_name or
         not employee_id or
-        photo is None
+        photo_1 is None
     )
 
     if missing_fields:
         st.error(
             ":material/error: Please provide the full name, employee ID, "
-            "and upload a face image before registering."
+            "and at least the first face photo before registering"
         )
     else:
         with st.spinner("Extracting face embedding and saving the record..."):
             try:
                 files = {
-                    "photo": (
-                        photo.name,
-                        photo.getvalue(),
-                        photo.type,
-                    )
+                    "photo_1": (photo_1.name, photo_1.getvalue(), photo_1.type),
                 }
+                if photo_2 is not None:
+                    files["photo_2"] = (photo_2.name, photo_2.getvalue(), photo_2.type)
+                if photo_3 is not None:
+                    files["photo_3"] = (photo_3.name, photo_3.getvalue(), photo_3.type)
 
                 data = {
                     "name": full_name,
@@ -72,11 +75,12 @@ if submit:
                 )
 
                 if response.status_code == 200:
+                    result = response.json()
                     st.success(
                         f":material/check_circle: {full_name} was registered successfully."
+                        f"({result.get('photos_registered', 1)} photo(s))."
                     )
                 else:
-                    # return a message
                     st.error(
                         f":material/cancel: Registration failed "
                         f"({response.status_code})\n\n{response.text}"

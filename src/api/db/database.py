@@ -134,9 +134,10 @@ def find_closest_match(embedding):
     try:
         cursor.execute(
             '''
-            SELECT id, name, employee_id, access_level,
-                   VECTOR_DISTANCE(embedding, :embedding, COSINE) AS distance
-            FROM DETECTED_PEOPLE
+            SELECT p.id, p.name, p.employee_id, p.access_level,
+                   VECTOR_DISTANCE(f.embedding, :embedding, COSINE) AS distance
+            FROM PERSON_FACES f
+            JOIN DETECTED_PEOPLE p ON p.id = f.person_id
             ORDER BY distance ASC
             FETCH FIRST 1 ROW ONLY
             ''',

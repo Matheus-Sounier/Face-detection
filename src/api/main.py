@@ -1,4 +1,4 @@
-from db.database import init_db, insert_person, find_closest_match, log_access
+from db.database import init_db, insert_person, insert_face, find_closest_match, log_access
 from recognition.embedding import extract_embedding
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
@@ -6,6 +6,7 @@ from mediapipe.tasks.python import vision
 from fastapi import FastAPI, Form, UploadFile, File, HTTPException
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+from typing import Optional
 
 import numpy as np
 import mediapipe as mp
@@ -52,50 +53,59 @@ async def enroll_person(
     name: str = Form(...),
     employee_id: str = Form(...),
     access_level: str = Form(...),
-    photo: UploadFile = File(...),
+    photo_1: UploadFile = File(...),
+    photo_2: Optional[UploadFile] = File(None),
+    photo_3: Optional[UploadFile] = File(None),
 ):
-    image_bytes = await photo.read()
-    image_array = np.frombuffer(image_bytes, dtype=np.uint8)
-    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+    photos = [p for p in (photo_1, photo_2, photo_3) if p is not None]
 
-    if image is None:
-        raise HTTPException(status_code=400, detail="Uploaded file is not a valid image.")
+    processed_faces = []
 
-    mp_image = mp.Image(
-        image_format=mp.ImageFormat.SRGB,
-        data=cv2.cvtColor(image, cv2.COLOR_BGR2RGB),
-    )
-    result = detector.detect(mp_image)
+    for i, photo in enumerate(photos, start=1):
+        image_bytes = await photo.read()
+        image_array = np.frombuffer(image_bytes, dtype=np.uint8)
+        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
-    if not result.detections:
-        raise HTTPException(status_code=422, detail="No face detected in the uploaded image.")
+        if image is None:
+            raise HTTPException(status_code=400, detail=f"Photo {i}: invalid file")
 
-    if len(result.detections) > 1:
-        raise HTTPException(
-            status_code=422,
-            detail="Multiple faces detected. Upload an image with a single face.",
+        mp_image = mp.Image(
+            image_format=mp.ImageFormat.SRGB,
+            data=cv2.cvtColor(image, cv2.COLOR_BGR2RGB),
         )
+        result = detector.detect(mp_image)
+
+        if not result.detections:
+            raise HTTPException(status_code=422, detail=f"Photo {i}: no face detected")
+
+        if len(result.detections) > 1:
+            raise HTTPException(status_code=422, detail=f"Photo {i}: more than one face detected")
+
+        try:
+            embedding = extract_embedding(image)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"Photo {i}: {exc}")
+
+        cropped_bytes = crop_with_margin(image, result.detections[0].bounding_box)
+        processed_faces.append((embedding, cropped_bytes))
 
     try:
-        embedding = extract_embedding(image)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    registered_face_bytes = crop_with_margin(image, result.detections[0].bounding_box)
-
-    try:
-        person_id = insert_person(name, employee_id, access_level, embedding, registered_face_bytes)
+        person_id = insert_person(name, employee_id, access_level)
     except oracledb.IntegrityError:
         raise HTTPException(
             status_code=409,
             detail=f"employee_id '{employee_id}' is already registered.",
         )
 
+    for embedding, cropped_bytes in processed_faces:
+        insert_face(person_id, embedding, cropped_bytes)
+
     return {
         "id": person_id,
         "name": name,
         "employee_id": employee_id,
         "access_level": access_level,
+        "photos_registered": len(processed_faces),
         "status": "enrolled",
     }
 
