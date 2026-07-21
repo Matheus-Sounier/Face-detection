@@ -26,8 +26,6 @@ def init_db():
                 name            VARCHAR2(255) NOT NULL,
                 employee_id     VARCHAR2(50) NOT NULL UNIQUE,
                 access_level    VARCHAR2(50) NOT NULL,
-                embedding       VECTOR(512, FLOAT32) NOT NULL,
-                registered_face BLOB,
                 enrolled_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -37,6 +35,30 @@ def init_db():
         error, = e.args
         if error.code == 955:  # ORA-00955
             print("Table DETECTED_PEOPLE already exists, continuing...")
+        else:
+            raise
+    finally:
+        cursor.close()
+        conn.close()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute('''
+            CREATE TABLE PERSON_FACES (
+                id           NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                person_id    NUMBER NOT NULL REFERENCES DETECTED_PEOPLE(id) ON DELETE CASCADE,
+                embedding    VECTOR(512, FLOAT32) NOT NULL,
+                face_image   BLOB,
+                enrolled_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        print("Table PERSON_FACES created.")
+    except oracledb.DatabaseError as e:
+        error, = e.args
+        if error.code == 955:
+            print("Table PERSON_FACES already exists, continuing...")
         else:
             raise
     finally:
