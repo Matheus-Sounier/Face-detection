@@ -23,4 +23,4 @@ def detect_faces(img):
         data=cv2.cvtColor(img, cv2.COLOR_BGR2RGB),
     )
     timestamp_ms = int(time.perf_counter() * 1000)  
-    return detector.detect(mp_image)
+    return detector.detect_for_video(mp_image, timestamp_ms)
