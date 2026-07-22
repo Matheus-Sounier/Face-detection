@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MATCH_THRESHOLD = 0.4
+MATCH_THRESHOLD = 0.45
 
 def get_connection():
     return oracledb.connect(
@@ -135,9 +135,10 @@ def find_closest_match(embedding):
         cursor.execute(
             '''
             SELECT p.id, p.name, p.employee_id, p.access_level,
-                   VECTOR_DISTANCE(f.embedding, :embedding, COSINE) AS distance
+                   MIN(VECTOR_DISTANCE(f.embedding, :embedding, COSINE)) AS distance
             FROM PERSON_FACES f
             JOIN DETECTED_PEOPLE p ON p.id = f.person_id
+            GROUP BY p.id, p.name, p.employee_id, p.access_level
             ORDER BY distance ASC
             FETCH FIRST 1 ROW ONLY
             ''',
@@ -218,5 +219,6 @@ def insert_face(person_id: int, embedding, face_image_bytes: bytes) -> int:
     finally:
         cursor.close()
         conn.close()
+        
 if __name__ == "__main__":
     init_db()
