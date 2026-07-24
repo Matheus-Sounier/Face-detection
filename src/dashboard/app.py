@@ -12,13 +12,8 @@ st.set_page_config(
     page_icon=":material/badge:"
 )
 
-st.title(":material/badge: Face Access Control System")
-
-tab_register, tab_chat = st.tabs(
-    [":material/person_add: Register Person", ":material/forum: Analytics Chat"]
-)
-
-with tab_register:
+def register_page():
+    st.title(":material/person_add: Register Person")
     st.caption("Register a new person in the facial recognition system.")
 
     with st.form("registration_form", clear_on_submit=True):
@@ -100,7 +95,8 @@ with tab_register:
                         f":material/cloud_off: Unable to connect to the API.\n\n{exc}"
                     )
 
-with tab_chat:
+def chat_page():
+    st.title(":material/forum: Analytics Chat")
     st.caption("Ask questions in natural language about the recorded access events.")
 
     if "chat_history" not in st.session_state:
@@ -121,7 +117,7 @@ with tab_chat:
             st.markdown(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("Querying the database..."):
+            with st.spinner("Thinking, it might take a while..."):
                 try:
                     response = requests.post(
                         f"{API_URL}/analytics/chat",
@@ -150,3 +146,9 @@ with tab_chat:
         st.session_state.chat_history.append(
             {"role": "assistant", "content": reply}
         )
+
+register = st.Page(register_page, title="Register Person", icon=":material/person_add:")
+chat = st.Page(chat_page, title="Analytics Chat", icon=":material/forum:")
+
+pg = st.navigation([register, chat])
+pg.run()
