@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MATCH_THRESHOLD = 0.45
+MATCH_THRESHOLD = 0.5
 
 def get_connection():
     return oracledb.connect(
@@ -76,6 +76,7 @@ def init_db():
                 recognized     NUMBER(1) NOT NULL,
                 access_granted NUMBER(1) NOT NULL,
                 face_detected  BLOB,
+                face_description VARCHAR2(500),
                 attempted_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -111,6 +112,64 @@ def insert_person(name: str, employee_id: str, access_level: str) -> int:
                 "name": name,
                 "employee_id": employee_id,
                 "access_level": access_level,
+                "id": result_id,
+            },
+        )
+        conn.commit()
+        return result_id.getvalue()[0]
+    finally:
+        cursor.close()
+        conn.close()
+
+def log_access(person_id, employee_id, recognized: bool, access_granted: bool, face_image_bytes: bytes = None) -> int:
+    """no recognizable face in the submitted cutout"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute(
+            '''
+            INSERT INTO ACCESS_LOGS (person_id, employee_id, recognized, access_granted, face_detected)
+            VALUES (:person_id, :employee_id, :recognized, :access_granted, :face_detected)
+            RETURNING id into :id
+            ''',
+            {
+                "person_id": person_id,
+                "employee_id": employee_id,
+                "recognized": 1 if recognized else 0,
+                "access_granted": 1 if access_granted else 0,
+                "face_detected": face_image_bytes,
+                "id": result_id,
+            },
+        )
+        conn.commit()
+        return result_id.getvalue()[0]
+    finally:
+        cursor.close()
+        conn.close()
+
+def insert_face(person_id: int, embedding, face_image_bytes: bytes) -> int:
+    """
+    Adds one face embedding + image.
+    called multiple times for the same person_id.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    vector_value = array.array("f", embedding.tolist())
+
+    try:
+        result_id = cursor.var(int)
+        cursor.execute(
+            '''
+            INSERT INTO PERSON_FACES (person_id, embedding, face_image)
+            VALUES (:person_id, :embedding, :face_image)
+            RETURNING id INTO :id
+            ''',
+            {
+                "person_id": person_id,
+                "embedding": vector_value,
+                "face_image": face_image_bytes,
                 "id": result_id,
             },
         )
@@ -161,61 +220,6 @@ def find_closest_match(embedding):
             "access_level": access_level,
             "distance": distance,
         }
-    finally:
-        cursor.close()
-        conn.close()
-
-def log_access(person_id, employee_id, recognized: bool, access_granted: bool, face_image_bytes: bytes = None):
-    """no recognizable face in the submitted cutout"""
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute(
-            '''
-            INSERT INTO ACCESS_LOGS (person_id, employee_id, recognized, access_granted, face_detected)
-            VALUES (:person_id, :employee_id, :recognized, :access_granted, :face_detected)
-            ''',
-            {
-                "person_id": person_id,
-                "employee_id": employee_id,
-                "recognized": 1 if recognized else 0,
-                "access_granted": 1 if access_granted else 0,
-                "face_detected": face_image_bytes,
-            },
-        )
-        conn.commit()
-    finally:
-        cursor.close()
-        conn.close()
-
-def insert_face(person_id: int, embedding, face_image_bytes: bytes) -> int:
-    """
-    Adds one face embedding + image.
-    called multiple times for the same person_id.
-    """
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    vector_value = array.array("f", embedding.tolist())
-
-    try:
-        result_id = cursor.var(int)
-        cursor.execute(
-            '''
-            INSERT INTO PERSON_FACES (person_id, embedding, face_image)
-            VALUES (:person_id, :embedding, :face_image)
-            RETURNING id INTO :id
-            ''',
-            {
-                "person_id": person_id,
-                "embedding": vector_value,
-                "face_image": face_image_bytes,
-                "id": result_id,
-            },
-        )
-        conn.commit()
-        return result_id.getvalue()[0]
     finally:
         cursor.close()
         conn.close()
