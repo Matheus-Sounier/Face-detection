@@ -224,6 +224,25 @@ def find_closest_match(embedding):
         cursor.close()
         conn.close()
 
+def has_recent_unknown_log(within_seconds: int = 60) -> bool:
+    """Checks if an unrecognized attempt 3was already logged very recently"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            '''
+            SELECT COUNT(*) FROM ACCESS_LOGS
+            WHERE recognized = 0
+              AND attempted_at >= SYSTIMESTAMP - NUMTODSINTERVAL(:seconds, 'SECOND')
+            ''',
+            {"seconds": within_seconds},
+        )
+        count = cursor.fetchone()[0]
+        return count > 1
+    finally:
+        cursor.close()
+        conn.close()
+
 def get_unknown_faces(limit: int = 40) -> list[dict]:
     """
     Returns the most recent unrecognized access attempts
