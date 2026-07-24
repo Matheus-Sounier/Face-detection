@@ -1,7 +1,11 @@
+from io import BytesIO
+from dotenv import load_dotenv
+
+import streamlit as st
+
 import os
 import requests
-import streamlit as st
-from dotenv import load_dotenv
+import base64
 
 load_dotenv()
 
@@ -147,8 +151,57 @@ def chat_page():
             {"role": "assistant", "content": reply}
         )
 
+def unknown_faces_page():
+    st.title(":material/person_search: Unknown Faces")
+    st.caption("Recent access attempts by faces that couldn't be matched, with AI-generated descriptions.")
+
+    limit = st.slider("Number of recent attempts to show", min_value=5, max_value=50, value=20, step=5)
+
+    if st.button(":material/refresh: Refresh"):
+        st.rerun()
+
+    try:
+        response = requests.get(
+            f"{API_URL}/analytics/unknown-faces",
+            params={"limit": limit},
+            timeout=15,
+        )
+    except requests.exceptions.RequestException as exc:
+        st.error(f":material/cloud_off: Unable to connect to the API.\n\n{exc}")
+        return
+
+    if response.status_code != 200:
+        st.error(f":material/error: Error ({response.status_code}): {response.text}")
+        return
+
+    faces = response.json()["faces"]
+
+    if not faces:
+        st.info(":material/info: No unrecognized access attempts logged yet.")
+        return
+
+    for face in faces:
+        col_img, col_info = st.columns([1, 3])
+
+        with col_img:
+            if face["image_base64"]:
+                image_bytes = base64.b64decode(face["image_base64"])
+                st.image(BytesIO(image_bytes), width=120)
+            else:
+                st.caption("No image")
+
+        with col_info:
+            st.markdown(f"**{face['attempted_at']}**")
+            if face["description"]:
+                st.write(face["description"])
+            else:
+                st.caption(":material/hourglass_empty: Description not generated yet (or generation failed).")
+
+        st.divider()
+
 register = st.Page(register_page, title="Register Person", icon=":material/person_add:")
 chat = st.Page(chat_page, title="Analytics Chat", icon=":material/forum:")
+unknown_faces = st.Page(unknown_faces_page, title="Unknown Faces", icon=":material/person_search:")
 
-pg = st.navigation([register, chat])
+pg = st.navigation([register, chat, unknown_faces])
 pg.run()
